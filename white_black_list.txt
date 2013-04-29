@@ -1,0 +1,146 @@
+功能描述：
+处在黑名单中的ip与网络，将无法访问web服务。
+处在白名单中的ip，访问web服务时，将不受dragon所有安全模块的限制。
+
+文件配置方法说明
+
+一、定义黑名单或白名单方法：
+1. 配置格式
+配置关键字       黑名单或白名单文件       存储空间
+white_black_list_conf conf/white.list zone=white:2m;   
+  |                     |                    |    |
+  |                     |                    |    --------------------------------------存储空间大小 这里是2m. 空间大小决定黑白名单的容量
+  |                     |                    ---------------------------------------------------------------------------------------------存储空间名
+  |                     ---------------------------------------------------------------黑名单或白名单配置文件路径
+  ------------------------------------------------配置命令
+
+2. 配置关键字   white_black_list_conf。
+3. 只能在http{} 中使用
+4. white_black_list_conf可以配置多个  只需 zone=value 其中的value不同就可
+5. 配置示例：
+
+http{
+	......
+	white_black_list_conf conf/white.list zone=white:4m;
+	white_black_list_conf conf/black.list zone=black:4m;
+	......
+	server{
+	.......
+	}
+	.......
+}
+
+二、黑白名单作用范围
+1. 配置格式
+配置关键字  on/off
+配置关键字有：white_list 与 black_list  分别用来表示白名单与黑名单
+
+2. 能在http{}、server{}、location{}下使用, 功能默认是关闭
+
+3. 配置示例：
+http{
+	......
+	white_black_list_conf conf/white.list zone=white1:4m;
+	white_black_list_conf conf/black.list zone=black1:4m;
+	white_list white1 on;                                                                                                  #白名单  white1 在整个http{} 中都开启
+	black_list black1 on;                                                                                                   #黑名单  black1 在整个http{} 中都开启
+	server{
+		.......
+	}
+	.......
+}
+
+http{
+	......
+	white_black_list_conf conf/white.list zone=white2:4m;
+	white_black_list_conf conf/black.list zone=black2:4m;
+	server{
+		.......
+		white_list white2 on;                                                                                                 #白名单  white1 在整个server{} 中都开启
+		black_list black2 on;                                                                                                 #黑名单  black1 在整个server{} 中都开启
+		.......
+	}
+	.......
+}
+
+
+http{
+	......
+	white_black_list_conf conf/white.list zone=white3:4m;
+	white_black_list_conf conf/black.list zone=black3:4m;
+	white_black_list_conf conf/black.list zone=black2:4m;
+	white_black_list_conf conf/white.list zone=white2:4m;
+	server{
+		.......
+		location /do {
+			........
+			white_list white3 on;                                                                                                 #白名单  white3 在location /do{} 中开启
+			black_list black3 on;                                                                                                  #黑名单  black3 在location /do{} 中开启
+			........
+		}
+		
+		location /do1{
+			white_list white2 on;                                                                                                  #白名单  white2 在整个server{} 中都开启
+			black_list black2 on;                                                                                                   #黑名单  black2 在整个server{} 中都开启
+		}
+		.......
+	}
+	.......
+}
+
+
+http配置接口说明：
+一、配置配置接口
+http{
+	.......
+	server{
+		......
+		location /sec_config{
+			sec_config on;
+		}
+		......
+	}
+	.......
+}
+
+
+二、配置方法：
+1. http://xxx/sec_config    查看黑白名单定义情况
+返回结果如下
+{
+	"version":	"nginx/1.3.0",
+	"code":	"0",
+	"item":	{
+		"conf_type":	"white_black_list_conf",
+		"zone_name":	"white",
+		"list_path":	"/home/john/nginx/conf/white.list"
+	},
+	"item":	{
+		"conf_type":	"white_black_list_conf",
+		"zone_name":	"black",
+		"list_path":	"/home/john/nginx/conf/black.list"
+	},
+	"item":	{
+		"conf_type":	"white_black_list_conf",
+		"zone_name":	"ex",
+		"list_path":	"/home/john/nginx/conf/status_ex"
+	}
+}
+
+2. http://xxx/sec_config?zone_name=white  查看zone_name 为white 的   list_path中的具体内容
+
+3. http://xxx/sec_config?zone_name=white&add_item=192.168.141.23   向 zone_name 为white 中增加192.168.141.23
+
+4. http://xxx/sec_config?zone_name=white&delete_item=192.168.141.23   在 zone_name 为white 中删除192.168.141.23
+
+查看配置方法2:
+http://xxx/sec_config?for_each
+
+三、黑白名单文件内容
+conf/black.list 文件内容如下
+2.2.2.2
+192.168.141.1
+3.3.3.3
+4.4.4.5
+2.3.4.4
+

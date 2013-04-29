@@ -1,0 +1,8 @@
+CORE_INCS="$CORE_INCS $ngx_addon_dir"
+
+ngx_addon_name=ngx_white_black_list_module
+HTTP_MODULES="$HTTP_MODULES ngx_white_black_list_module"
+NGX_ADDON_SRCS="$NGX_ADDON_SRCS $ngx_addon_dir/ngx_white_black_list.c"
+NGX_ADDON_DEPS="$NGX_ADDON_DEPS"
+
+have=NGX_WHITE_BLACK_LIST . auto/have 
