@@ -35,6 +35,8 @@ typedef struct {
 typedef struct {
     u_char              color;
     u_char              len;
+    u_char				is_dyn_black;
+    uint64_t			add_time;
     u_char              data[1];
 } ngx_white_black_list_node_t;
 
@@ -43,6 +45,8 @@ typedef struct {
     ngx_uint_t          isvalid;		/*on or off*/
 	ngx_uint_t			iswhite;		/*is white list ?*/
 	ngx_uint_t			delete;			/*delete flag*/
+	ngx_uint_t			is_dyn_black;	/*is dyn_black*/
+	ngx_uint_t			forbidden_time; /*forbedden time sec*/
 } ngx_white_black_list_isvalid_t;
 
 typedef struct {
@@ -60,9 +64,9 @@ typedef struct {
 extern ngx_array_t         *array_white_black_list;
 extern ngx_module_t  		ngx_white_black_list_module;
 
+ngx_int_t ngx_black_add_item_interface(ngx_http_request_t *r, u_char is_dyn_black);
 ngx_int_t ngx_white_list_is_in_list(ngx_http_request_t *r);
-
-ngx_int_t  ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_str_t *zone_name, ngx_str_t *reason);
+ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_str_t *zone_name, ngx_str_t *reason, u_char is_dyn_black);
 ngx_int_t ngx_white_black_delete_item(ngx_http_request_t *r, ngx_str_t *value, ngx_str_t *zone_name, ngx_str_t *reason);
 char *ngx_http_white_black_list_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 

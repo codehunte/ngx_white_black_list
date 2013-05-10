@@ -18,12 +18,14 @@ ngx_array_t         *array_white_black_list;
 static char *ngx_white_black_list_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static ngx_int_t ngx_white_black_list_handler(ngx_http_request_t *r);
 static ngx_int_t ngx_white_only_list_handler(ngx_http_request_t *r);
+static ngx_int_t ngx_dyn_black_delete_handler(ngx_http_request_t *r);
 
 static ngx_int_t ngx_white_black_list_init(ngx_conf_t *cf);
 
 static void * ngx_white_black_list_create_conf(ngx_conf_t *cf);
 static char * ngx_white_black_list_merge_conf(ngx_conf_t *cf, void *parent, void *child);
 static ngx_int_t ngx_white_black_list_conf_parse (ngx_shm_zone_t *shm_zone);
+static char *ngx_http_dyn_black_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 ngx_shm_zone_t *ngx_whte_black_get_shmzone_by_name(ngx_str_t *zone_name);
 
@@ -50,7 +52,14 @@ static ngx_command_t  ngx_white_black_list_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
       NULL },
-      
+
+	{ ngx_string("dyn_black"),
+	  NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE2,
+	  ngx_http_dyn_black_set,
+	  NGX_HTTP_LOC_CONF_OFFSET,
+	  0,
+	  NULL },
+
       ngx_null_command
 };
 
@@ -606,7 +615,136 @@ ngx_int_t ngx_white_list_is_in_list(ngx_http_request_t *r)
 	return NGX_ERROR;
 }
 
+static ngx_int_t
+ngx_ip_in_black_list(ngx_http_request_t *r)
+{
+	uint32_t                        hash;
+	ngx_str_t						*ip_str;
+	ngx_uint_t						i;
+	ngx_slab_pool_t              	*shpool;
+	ngx_rbtree_node_t              *node;
+	ngx_network_addr_list_t			*pos_net_addr;
+	ngx_network_addr_node_t			*pos_data;
+	ngx_white_black_list_ctx_t      *ctx;
+	ngx_white_black_list_node_t		*bln;
+	ngx_white_black_list_conf_t  	*lccf;
+	ngx_white_black_list_isvalid_t 	*valids;
+
+	ip_str = &r->connection->addr_text;
+	hash = (uint32_t)ngx_inet_addr(ip_str->data, ip_str->len);
+
+	lccf = ngx_http_get_module_loc_conf(r, ngx_white_black_list_module);
+	valids = lccf->valids.elts;
+
+	/*black list*/
+	for (i = 0; i < lccf->valids.nelts; i++) {
+
+		if (valids[i].shm_zone == NULL)
+			continue;
+
+		if (valids[i].isvalid == 0)
+			continue;
+
+		if (valids[i].iswhite)
+			continue;
+
+		if (valids[i].delete == 1)
+			continue;
+
+		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
+		ctx = (ngx_white_black_list_ctx_t *)valids[i].shm_zone->data;
+		if (shpool == NULL || ctx == NULL)
+			continue;
+
+		ngx_shmtx_lock(&shpool->mutex);
+		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
+		ngx_shmtx_unlock(&shpool->mutex);
+		if (node)
+		{
+			return NGX_OK;
+		}
+	}
+	return NGX_ERROR;
+}
+
 static ngx_int_t 
+ngx_dyn_black_delete_handler(ngx_http_request_t *r)
+{
+	uint32_t                        hash;
+	ngx_str_t						*ip_str;
+	ngx_uint_t						i;
+	ngx_slab_pool_t              	*shpool;
+	ngx_rbtree_node_t              *node;
+	ngx_network_addr_list_t			*pos_net_addr;
+	ngx_network_addr_node_t			*pos_data;
+	ngx_white_black_list_ctx_t      *ctx;
+	ngx_white_black_list_node_t		*bln;
+	ngx_white_black_list_conf_t  	*lccf;
+	ngx_white_black_list_isvalid_t 	*valids;
+
+	if (r==NULL || r->connection==NULL)
+			return NGX_DECLINED;
+
+	ip_str = &r->connection->addr_text;
+	hash = (uint32_t)ngx_inet_addr(ip_str->data, ip_str->len);
+
+	lccf = ngx_http_get_module_loc_conf(r, ngx_white_black_list_module);
+	valids = lccf->valids.elts;
+
+	/*black list*/
+	for (i = 0; i < lccf->valids.nelts; i++) {
+
+		/*
+		 * dyn_black enable?
+		 * */
+		if (!valids[i].is_dyn_black)
+			continue;
+
+		if (valids[i].shm_zone == NULL)
+			continue;
+
+		if (valids[i].isvalid == 0)
+			continue;
+
+		if (valids[i].iswhite)
+			continue;
+
+		if (valids[i].delete == 1)
+			continue;
+
+		/*==0 ËµÃ÷ÎªÓÀ¾Ã*/
+		if (valids[i].forbidden_time == 0)
+			continue;
+
+		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
+		ctx = (ngx_white_black_list_ctx_t *)valids[i].shm_zone->data;
+		if (shpool == NULL || ctx == NULL)
+			continue;
+
+		ngx_shmtx_lock(&shpool->mutex);
+		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
+		ngx_shmtx_unlock(&shpool->mutex);
+		if (node)
+		{
+			bln = (ngx_white_black_list_node_t *) &node->color;
+			if (bln->is_dyn_black)
+			{
+				/*delete*/
+				if (bln->add_time + valids[i].forbidden_time < ngx_cached_time->sec)
+				{
+					ngx_shmtx_lock(&shpool->mutex);
+					ngx_rbtree_delete(ctx->rbtree, node);
+					ngx_shmtx_unlock(&shpool->mutex);
+
+					return NGX_DECLINED;;
+				}
+			}
+		}
+	}
+	return NGX_DECLINED;
+}
+
+static ngx_int_t
 ngx_white_black_list_handler(ngx_http_request_t *r)
 {
 	uint32_t                        hash;
@@ -649,7 +787,6 @@ ngx_white_black_list_handler(ngx_http_request_t *r)
 		ctx = (ngx_white_black_list_ctx_t *)valids[i].shm_zone->data;
 		
 		/*ngx_shmtx_lock(&shpool->mutex);*/
-		/*unneed lock!!*/
 		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
 		/*ngx_shmtx_unlock(&shpool->mutex);*/
 		if (node)
@@ -689,7 +826,6 @@ ngx_white_black_list_handler(ngx_http_request_t *r)
 		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
 
 		/*ngx_shmtx_lock(&shpool->mutex);*/
-		/*unneed lock!!*/
 		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
 		/*ngx_shmtx_unlock(&shpool->mutex);*/
 		if (node)
@@ -757,7 +893,6 @@ ngx_white_only_list_handler(ngx_http_request_t *r)
 		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
 
 		/*ngx_shmtx_lock(&shpool->mutex);*/
-		/*unneed lock!!*/
 		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
 		/*ngx_shmtx_unlock(&shpool->mutex);*/
 		if (node)
@@ -796,6 +931,13 @@ ngx_white_black_list_init(ngx_conf_t *cf)
     }
 
     *h = ngx_white_black_list_handler;
+
+    h = ngx_array_push(&cmcf->phases[NGX_HTTP_PREACCESS_PHASE].handlers);
+    if (h == NULL) {
+	    return NGX_ERROR;
+    }
+
+    *h = ngx_dyn_black_delete_handler;
 
     return NGX_OK;
 }
@@ -837,10 +979,54 @@ ngx_white_black_list_merge_conf(ngx_conf_t *cf, void *parent, void *child)
     return NGX_CONF_OK;
 }
 
+static char *ngx_http_dyn_black_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_str_t                       *value;
+	ngx_uint_t                      i;
+	ngx_shm_zone_t              	*shm_zone;
+	ngx_white_black_list_conf_t  	*lccf = conf;
+	ngx_white_black_list_isvalid_t 	*valid, *valids;
+
+	value = cf->args->elts;
+
+	if (cf->args->nelts < 3)
+			return NGX_CONF_ERROR;
+
+	shm_zone = ngx_whte_black_get_shmzone_by_name(&value[1]);
+	//shm_zone = ngx_shared_memory_add(cf, &value[1], 0,
+	//                                    &ngx_white_black_list_module);
+
+	if (shm_zone == NULL) {
+		return NGX_CONF_ERROR;
+	}
+
+	valids = lccf->valids.elts;
+	if (valids == NULL) {
+		if (ngx_array_init(&lccf->valids, cf->pool, 1,
+						   sizeof(ngx_white_black_list_isvalid_t))
+			!= NGX_OK)
+		{
+			return NGX_CONF_ERROR;
+		}
+	}
+
+	for (i = 0; i < lccf->valids.nelts; i++) {
+		if (valids[i].shm_zone == shm_zone)
+		{
+			valids[i].is_dyn_black = 1;
+			valids[i].forbidden_time = ngx_atoi(value[2].data, value[2].len);
+		}
+
+		break;
+	}
+
+	return NGX_CONF_OK;
+}
+
 char *ngx_http_white_black_list_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_str_t                           *value;
-    ngx_uint_t                          i;
+    ngx_str_t                       *value;
+    ngx_uint_t                      i;
     ngx_shm_zone_t              	*shm_zone;
     ngx_white_black_list_conf_t  	*lccf = conf;
     ngx_white_black_list_isvalid_t 	*valid, *valids;
@@ -849,10 +1035,7 @@ char *ngx_http_white_black_list_set(ngx_conf_t *cf, ngx_command_t *cmd, void *co
 
     if (cf->args->nelts < 3)
             return NGX_CONF_ERROR;
-/*
-    if (ngx_shm_zone_isexist(cf, &value[1], &ngx_white_black_list_module) == 0)
-            return NGX_CONF_ERROR;
-*/
+
     shm_zone = ngx_shared_memory_add(cf, &value[1], 0,
                                      &ngx_white_black_list_module);
     if (shm_zone == NULL) {
@@ -892,6 +1075,8 @@ char *ngx_http_white_black_list_set(ngx_conf_t *cf, ngx_command_t *cmd, void *co
 		    valids[i].shm_zone = shm_zone;
 			valids[i].delete =0;
 			
+			valids[i].is_dyn_black = 0;
+
             return NGX_CONF_OK;
         }
     }
@@ -1159,7 +1344,46 @@ ngx_int_t ngx_white_black_delete_from_file(ngx_str_t *value, ngx_str_t *zone_nam
 	return NGX_OK;
 }
 
-ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_str_t *zone_name, ngx_str_t *reason)
+ngx_int_t ngx_black_add_item_interface(ngx_http_request_t *r, u_char is_dyn_black)
+{
+	ngx_str_t						sr;
+	ngx_uint_t						i;
+	ngx_white_black_list_conf_t  	*lccf;
+	ngx_white_black_list_isvalid_t 	*valids;
+
+	lccf = ngx_http_get_module_loc_conf(r, ngx_white_black_list_module);
+	valids = lccf->valids.elts;
+
+	if (r == NULL || r->connection == NULL)
+		return NGX_ERROR;
+
+	/*black list*/
+	for (i = 0; i < lccf->valids.nelts; i++) {
+
+		if (!valids[i].is_dyn_black && is_dyn_black)
+			continue;
+
+		if (valids[i].shm_zone == NULL)
+			continue;
+
+		if (valids[i].isvalid == 0)
+			continue;
+
+		if (valids[i].iswhite)
+			continue;
+
+		if (valids[i].delete == 1)
+			continue;
+
+		if (valids[i].shm_zone != NULL)
+			return ngx_white_black_add_item(r, &r->connection->addr_text,
+							&valids[i].shm_zone->shm.name, &sr, is_dyn_black);
+	}
+
+	return NGX_ERROR;
+}
+
+ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_str_t *zone_name, ngx_str_t *reason, u_char is_dyn_black)
 {
 	ssize_t							len, n;
 	uint32_t						hash;
@@ -1174,8 +1398,15 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
     ngx_white_black_list_node_t     *lc;
 	u_char							*buf_temp=NULL, *t=NULL;
 
-	buf_temp = ngx_pcalloc(r->pool,256);
-	t = ngx_pcalloc(r->pool, value->len+1);
+	buf_temp = ngx_pcalloc(r->pool,128);
+	if (ngx_ip_in_black_list(r) == NGX_OK)
+	{
+		reason->data = "the ip is exist!";
+		reason->len = sizeof("the ip is exist!")-1;
+		return NGX_OK;
+	}
+
+	t = ngx_pcalloc(r->pool, value->len+1);
 	if (buf_temp == NULL
 	   ||t == NULL )
 	{
@@ -1188,7 +1419,7 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
 		|| value->len==0 || zone_name->len==0)
 	{
 		reason->data = "add_item or zone_name is NULL!";
-		reason->len = ngx_strlen("add_item or zone_name is NULL!");
+		reason->len = sizeof("add_item or zone_name is NULL!")-1;
 		return NGX_ERROR;
 	}
 	
@@ -1225,6 +1456,8 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
 
     node->key = hash;
     lc->len = (u_char) len;
+    lc->is_dyn_black = is_dyn_black;
+    lc->add_time = ngx_cached_time->sec;
     ngx_memcpy(lc->data, &cdir, len);
 
 	/*is network addr?*/
@@ -1309,12 +1542,22 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
 			
 		}
 
-		rv = ngx_white_black_write_to_file(value, zone_name);
+		rv = NGX_OK;
+		if (!is_dyn_black)
+		{
+			rv = ngx_white_black_write_to_file(value, zone_name);
+		}
+
 		return rv;
 	}
 
 	/*is ip*/
-	rv = ngx_white_black_write_to_file(value, zone_name);
+	rv = NGX_OK;
+	if (!is_dyn_black)
+	{
+		rv = ngx_white_black_write_to_file(value, zone_name);
+	}
+
 	if (rv != NGX_OK)
 	{
 		if (rv == NGX_ERROR)
