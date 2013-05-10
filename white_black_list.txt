@@ -147,6 +147,21 @@ conf/black.list 文件内容如下
 2.3.4.4
 
 四、动态黑名单
+    要使用该功能必须对 ngx_http_limit_req_module.c 进行patch
+    在ngx_http_limit_req_module.c中
+    增加#include <white_black_list.h>
+    并修改代码找到：
+    "
+    if (rc == NGX_BUSY) {
+        ngx_log_error(lrcf->limit_log_level, r->connection->log, 0,
+                      "limiting requests, excess: %ui.%03ui by zone \"%V\"",
+                      excess / 1000, excess % 1000,
+                      &limit->shm_zone->shm.name);
+            
+	"
+    在其下面增加：
+    ngx_black_add_item_interface(r, 1);
+         
 	配备关键字：
 		dyn_black
 	
