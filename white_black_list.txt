@@ -1,6 +1,8 @@
 功能描述：
 处在黑名单中的ip与网络，将无法访问web服务。
 处在白名单中的ip，访问web服务时，将不受nginx所有安全模块的限制。
+支持动态黑名单（需要与ngx_http_limit_req 配合）
+具体详见下面的说明
 
 文件配置方法说明
 
@@ -144,3 +146,37 @@ conf/black.list 文件内容如下
 4.4.4.5
 2.3.4.4
 
+四、动态黑名单
+	配备关键字：
+		dyn_black
+	
+	格式：
+		dyn_black $zone_name time;
+	比如：
+		dyn_black black 60; //禁止访问60秒，60秒后自动解除
+	
+	注意：
+		必须要配置black_list
+
+	配置示例：
+		http{
+			....
+			white_black_list_conf conf/black.list zone=black:4m;
+			limit_req_zone  $binary_remote_addr  zone=one:8m   rate=4r/s;
+			...
+			server {
+			
+				location / {
+		            black_list black on;
+		            limit_req zone=one burst=6;
+		            dyn_black black 60;   //禁止访问60秒，60秒后自动解除
+		            ...
+		        }
+		
+		        location /xxx {
+		            sec_config on;
+		        }
+		        ...
+			}
+			...
+		}
