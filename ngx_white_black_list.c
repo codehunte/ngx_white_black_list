@@ -839,20 +839,20 @@ ngx_white_black_list_merge_conf(ngx_conf_t *cf, void *parent, void *child)
 
 char *ngx_http_white_black_list_set(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-	ngx_str_t						*value;
-    ngx_uint_t						i;
-	ngx_shm_zone_t              	*shm_zone;
+    ngx_str_t                           *value;
+    ngx_uint_t                          i;
+    ngx_shm_zone_t              	*shm_zone;
     ngx_white_black_list_conf_t  	*lccf = conf;
     ngx_white_black_list_isvalid_t 	*valid, *valids;
 
     value = cf->args->elts;
 
-	if (cf->args->nelts < 3)
-		return NGX_CONF_ERROR;
-	
-	if (ngx_shm_zone_isexist(cf, &value[1], &ngx_white_black_list_module) == 0)
-		return NGX_CONF_ERROR;
-
+    if (cf->args->nelts < 3)
+            return NGX_CONF_ERROR;
+/*
+    if (ngx_shm_zone_isexist(cf, &value[1], &ngx_white_black_list_module) == 0)
+            return NGX_CONF_ERROR;
+*/
     shm_zone = ngx_shared_memory_add(cf, &value[1], 0,
                                      &ngx_white_black_list_module);
     if (shm_zone == NULL) {
