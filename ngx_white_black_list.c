@@ -734,9 +734,8 @@ ngx_dyn_black_delete_handler(ngx_http_request_t *r)
 				{
 					ngx_shmtx_lock(&shpool->mutex);
 					ngx_rbtree_delete(ctx->rbtree, node);
+					ngx_slab_free_locked(shpool, node);
 					ngx_shmtx_unlock(&shpool->mutex);
-					ngx_slab_free(shpool, node);
-
 					return NGX_DECLINED;;
 				}
 			}
@@ -1679,8 +1678,8 @@ ngx_int_t ngx_white_black_delete_item(ngx_http_request_t *r, ngx_str_t *value, n
 	
 	ngx_shmtx_lock(&shpool->mutex);
 	ngx_rbtree_delete(ctx->rbtree, node);
+	ngx_slab_free_locked(shpool, node);
 	ngx_shmtx_unlock(&shpool->mutex);
-	ngx_slab_free(shpool, node);
 	return NGX_OK;
 }
 
