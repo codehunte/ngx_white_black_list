@@ -786,9 +786,9 @@ ngx_white_black_list_handler(ngx_http_request_t *r)
 		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
 		ctx = (ngx_white_black_list_ctx_t *)valids[i].shm_zone->data;
 		
-		/*ngx_shmtx_lock(&shpool->mutex);*/
+		ngx_shmtx_lock(&shpool->mutex);
 		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
-		/*ngx_shmtx_unlock(&shpool->mutex);*/
+		ngx_shmtx_unlock(&shpool->mutex);
 		if (node)
 			return NGX_HTTP_FORBIDDEN;
 
@@ -825,9 +825,9 @@ ngx_white_black_list_handler(ngx_http_request_t *r)
 		ctx = (ngx_white_black_list_ctx_t *)valids[i].shm_zone->data;
 		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
 
-		/*ngx_shmtx_lock(&shpool->mutex);*/
+		ngx_shmtx_lock(&shpool->mutex);
 		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
-		/*ngx_shmtx_unlock(&shpool->mutex);*/
+		ngx_shmtx_unlock(&shpool->mutex);
 		if (node)
 			return NGX_OK;
 		
@@ -892,9 +892,9 @@ ngx_white_only_list_handler(ngx_http_request_t *r)
 		ctx = (ngx_white_black_list_ctx_t *)valids[i].shm_zone->data;
 		shpool = (ngx_slab_pool_t *)valids[i].shm_zone->shm.addr;
 
-		/*ngx_shmtx_lock(&shpool->mutex);*/
+		ngx_shmtx_lock(&shpool->mutex);
 		node = ngx_white_black_list_lookup(ctx->rbtree, ip_str, hash);
-		/*ngx_shmtx_unlock(&shpool->mutex);*/
+		ngx_shmtx_unlock(&shpool->mutex);
 		if (node)
 			return NGX_OK;
 		
