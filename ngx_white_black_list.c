@@ -525,7 +525,7 @@ ngx_int_t ngx_white_black_list_conf_parse (ngx_shm_zone_t *shm_zone)
 			pos_net_addr = ctx->network_list;
 			if (pos_net_addr->data == NULL)
 			{
-				pos_net_data = ngx_slab_alloc_locked(shpool, sizeof(ngx_network_addr_node_t));
+				pos_net_data = ngx_slab_alloc(shpool, sizeof(ngx_network_addr_node_t));
 				if (pos_net_data == NULL)
 					return NGX_ERROR;
 
@@ -538,10 +538,10 @@ ngx_int_t ngx_white_black_list_conf_parse (ngx_shm_zone_t *shm_zone)
 			for (;pos_net_addr->next!=NULL; pos_net_addr = pos_net_addr->next){
 			}
 
-			new_node = ngx_slab_alloc_locked(shpool, sizeof(ngx_network_addr_list_t));
+			new_node = ngx_slab_alloc(shpool, sizeof(ngx_network_addr_list_t));
 			if (new_node == NULL)
 				return NGX_ERROR;
-			pos_net_data = ngx_slab_alloc_locked(shpool, sizeof(ngx_network_addr_node_t));
+			pos_net_data = ngx_slab_alloc(shpool, sizeof(ngx_network_addr_node_t));
 			if (pos_net_data == NULL)
 				return NGX_ERROR;
 			
@@ -560,7 +560,7 @@ ngx_int_t ngx_white_black_list_conf_parse (ngx_shm_zone_t *shm_zone)
 	        + offsetof(ngx_white_black_list_node_t, data)
 	        + len;
 
-	    node = ngx_slab_alloc_locked(shpool, n);
+	    node = ngx_slab_alloc(shpool, n);
 
 	    if (node == NULL) {
 	        ngx_shmtx_unlock(&shpool->mutex);
@@ -735,6 +735,7 @@ ngx_dyn_black_delete_handler(ngx_http_request_t *r)
 					ngx_shmtx_lock(&shpool->mutex);
 					ngx_rbtree_delete(ctx->rbtree, node);
 					ngx_shmtx_unlock(&shpool->mutex);
+					ngx_slab_free(shpool, node);
 
 					return NGX_DECLINED;;
 				}
@@ -1446,7 +1447,7 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
         + offsetof(ngx_white_black_list_node_t, data)
         + len;
 	
-    node = ngx_slab_alloc_locked(shpool, n);
+    node = ngx_slab_alloc(shpool, n);
     if (node == NULL) {
         return NGX_ERROR;
     }
@@ -1471,7 +1472,7 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
 		{
 			if (pos_network_addr_list->delete == 0)
 			{
-				network_addr_data = ngx_slab_alloc_locked(shpool, sizeof(ngx_network_addr_node_t));
+				network_addr_data = ngx_slab_alloc(shpool, sizeof(ngx_network_addr_node_t));
 				if (network_addr_data == NULL)
 					return NGX_ERROR;
 			}
@@ -1518,10 +1519,10 @@ ngx_int_t ngx_white_black_add_item(ngx_http_request_t *r, ngx_str_t *value, ngx_
 
 			/*need add new node?*/
 			if (pos_network_addr_list->next == NULL && pos_network_addr_list->delete!=1){
-				new_net_addr = ngx_slab_alloc_locked(shpool, sizeof(ngx_network_addr_list_t));
+				new_net_addr = ngx_slab_alloc(shpool, sizeof(ngx_network_addr_list_t));
 				if (new_net_addr == NULL)
 					return NGX_ERROR;
-				network_addr_data = ngx_slab_alloc_locked(shpool, sizeof(ngx_network_addr_node_t));
+				network_addr_data = ngx_slab_alloc(shpool, sizeof(ngx_network_addr_node_t));
 				if (network_addr_data == NULL)
 					return NGX_ERROR;
 				/*data*/
@@ -1657,7 +1658,9 @@ ngx_int_t ngx_white_black_delete_item(ngx_http_request_t *r, ngx_str_t *value, n
 		return NGX_OK;
 	}
 	
+	ngx_shmtx_lock(&shpool->mutex);
 	node = ngx_white_black_list_lookup(ctx->rbtree, value, hash);
+	ngx_shmtx_unlock(&shpool->mutex);
 	if (node == NULL)
 	{
 		snprintf(buf_temp, 256, "Do't find the item %s", value->data);
@@ -1677,7 +1680,7 @@ ngx_int_t ngx_white_black_delete_item(ngx_http_request_t *r, ngx_str_t *value, n
 	ngx_shmtx_lock(&shpool->mutex);
 	ngx_rbtree_delete(ctx->rbtree, node);
 	ngx_shmtx_unlock(&shpool->mutex);
-	
+	ngx_slab_free(shpool, node);
 	return NGX_OK;
 }
 
